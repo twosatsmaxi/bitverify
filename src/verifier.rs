@@ -1,10 +1,9 @@
-use std::str::FromStr;
-
 use base64::engine::GeneralPurpose;
 use base64::{engine::general_purpose, Engine as _};
 use bitcoin::sign_message::signed_msg_hash;
 use secp256k1::ecdsa::RecoveryId;
 use secp256k1::{Message, PublicKey, Secp256k1, VerifyOnly};
+use std::str::FromStr;
 
 pub trait Verifier {
     fn verify(&self, message: &str, signature: &str, public_key: &str) -> bool;
