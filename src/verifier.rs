@@ -15,7 +15,7 @@ pub struct ECDSAVerifier {
     base_64_decoder: GeneralPurpose,
 }
 impl ECDSAVerifier {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         ECDSAVerifier {
             secp: Secp256k1::verification_only(),
             base_64_decoder: general_purpose::STANDARD,
