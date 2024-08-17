@@ -1,0 +1,13 @@
+# bitverify ECDSA Verifier Library
+
+This Rust library provides functionality to verify messages signed using ECDSA (Elliptic Curve Digital Signature Algorithm) in Bitcoin.
+
+## Features
+
+- Verify messages signed with ECDSA.
+- Decode and verify signatures.
+- Recover public keys from signatures.
+
+## Usage
+
+`cargo add bitverify`
