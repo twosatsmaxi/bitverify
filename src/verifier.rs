@@ -75,4 +75,13 @@ mod tests {
             "bc1py467s8cw4252m63pn9efr4fupe4rfwmv9atv5mzagmjw3kt4teaqlx3wnq"
         );
     }
+    #[test]
+    fn test_ecdsa_verify_fail() {
+        let verifier = super::ECDSAVerifier::new();
+        let message = "abcderf";
+        let signature = "IB5disFKMA+6p6fhM2zO6WLq5hFdYLjEwUQhCV4BoKRaTouIacrE0QB6CeiQNaMimtW+3OoB8/XKMe9w0R3sHSA=";
+        let result = verifier.verify_only_message(message, signature).is_ok();
+        println!("Result: {}", result);
+        assert!(!result);
+    }
 }
