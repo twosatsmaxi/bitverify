@@ -2,12 +2,12 @@ use base64::engine::GeneralPurpose;
 use base64::{engine::general_purpose, Engine as _};
 use bitcoin::sign_message::signed_msg_hash;
 use secp256k1::ecdsa::RecoveryId;
-use secp256k1::{Message, PublicKey, Secp256k1, VerifyOnly};
+use secp256k1::{Error, Message, PublicKey, Secp256k1, VerifyOnly};
 use std::str::FromStr;
 
 pub trait Verifier {
     fn verify(&self, message: &str, signature: &str, public_key: &str) -> bool;
-    fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, ()>;
+    fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, Error>;
 }
 
 pub struct ECDSAVerifier {
@@ -33,20 +33,18 @@ impl Verifier for ECDSAVerifier {
             .unwrap_or(false)
     }
 
-    fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, ()> {
+    fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, Error> {
         let compact_sig = self.base_64_decoder.decode(signature.as_bytes()).unwrap();
-        let recovery_id = RecoveryId::from_i32(((compact_sig[0] - 27) % 4) as i32).unwrap();
+        let recovery_id = RecoveryId::from_i32(((compact_sig[0] - 27) % 4) as i32)?;
         let recoverable_sig =
             secp256k1::ecdsa::RecoverableSignature::from_compact(&compact_sig[1..], recovery_id)
                 .unwrap();
         let magic_hash = signed_msg_hash(message);
-        let message = Message::from_digest_slice((&magic_hash).as_ref()).unwrap();
-        let recovered_pubkey = self.secp.recover_ecdsa(&message, &recoverable_sig).unwrap();
-        let result = self
-            .secp
+        let message = Message::from_digest_slice((&magic_hash).as_ref())?;
+        let recovered_pubkey = self.secp.recover_ecdsa(&message, &recoverable_sig)?;
+        self.secp
             .verify_ecdsa(&message, &recoverable_sig.to_standard(), &recovered_pubkey)
-            .map(|_| recovered_pubkey);
-        result.map_err(|_| ())
+            .map(|_| recovered_pubkey)
     }
 }
 #[cfg(test)]
