@@ -34,11 +34,13 @@ impl Verifier for ECDSAVerifier {
     }
 
     fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, Error> {
-        let compact_sig = self.base_64_decoder.decode(signature.as_bytes()).unwrap();
+        let compact_sig = self
+            .base_64_decoder
+            .decode(signature.as_bytes())
+            .map_err(|_| Error::InvalidSignature)?;
         let recovery_id = RecoveryId::from_i32(((compact_sig[0] - 27) % 4) as i32)?;
         let recoverable_sig =
-            secp256k1::ecdsa::RecoverableSignature::from_compact(&compact_sig[1..], recovery_id)
-                .unwrap();
+            secp256k1::ecdsa::RecoverableSignature::from_compact(&compact_sig[1..], recovery_id)?;
         let magic_hash = signed_msg_hash(message);
         let message = Message::from_digest_slice((&magic_hash).as_ref())?;
         let recovered_pubkey = self.secp.recover_ecdsa(&message, &recoverable_sig)?;
