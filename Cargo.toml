@@ -2,7 +2,7 @@
 name = "bitverify"
 authors = ["twosatsmaxi"]
 description = "verify messages signed using ECDSA (Elliptic Curve Digital Signature Algorithm) in Bitcoin."
-version = "0.1.4"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/twosatsmaxi/bitverify"
@@ -12,3 +12,4 @@ secp256k1 = { version = "0.29.0", features = ["rand", "rand-std", "hashes"] }
 bitcoin = "0.32.2"
 bitcoin_hashes = "0.14.0"
 base64 = "0.22.1"
+bip322 = "0.0.7"
