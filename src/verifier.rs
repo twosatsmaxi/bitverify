@@ -7,7 +7,11 @@ use std::str::FromStr;
 
 pub trait Verifier {
     fn verify(&self, message: &str, signature: &str, public_key: &str) -> bool;
-    fn verify_bip322_only_message(&self, message: &str, signature: &str);
+    fn verify_bip322_only_message(
+        &self,
+        message: &str,
+        signature: &str,
+    ) -> Result<PublicKey, Error>;
     fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, Error>;
 }
 
@@ -34,40 +38,55 @@ impl Verifier for ECDSAVerifier {
             .unwrap_or(false)
     }
 
-    fn verify_bip322_only_message(&self, message: &str, signature: &str) {
+    fn verify_bip322_only_message(
+        &self,
+        message: &str,
+        signature: &str,
+    ) -> Result<PublicKey, Error> {
         let base_64_encoded = self
             .base_64_decoder
             .decode(signature.as_bytes())
-            .map_err(|_| Error::InvalidSignature)
-            .unwrap();
-        let signature = Signature::from_der(&signature.as_bytes());
-        if signature.is_err() {
-            let err = signature.unwrap_err();
-            println!("Error: {:?}", err);
-            return;
-        }
-        let signature = signature.unwrap();
-        // this is the signature in DER format with 66 bytes, get recoverable signature from it
+            .map_err(|_| Error::InvalidSignature)?;
         for recovery_id in 0..4 {
+            println!("{}", recovery_id);
             let rec_id = RecoveryId::from_i32(recovery_id).expect("Invalid recovery ID");
             let recoverable_sig = secp256k1::ecdsa::RecoverableSignature::from_compact(
-                &base_64_encoded.clone()[1..],
+                &base_64_encoded.clone()[2..],
                 rec_id,
             );
-            if recoverable_sig.is_err() {
+            if recoverable_sig.is_ok() {
                 let recoverable_sig = recoverable_sig.unwrap();
                 let magic_hash = signed_msg_hash(message);
                 let message = Message::from_digest_slice((&magic_hash).as_ref()).unwrap();
-                let recovered_pubkey = self.secp.recover_ecdsa(&message, &recoverable_sig).unwrap();
+                let recovered_pubkey = self.secp.recover_ecdsa(&message, &recoverable_sig);
+                if recovered_pubkey.is_err() {
+                    continue;
+                }
                 let verified = self
                     .secp
-                    .verify_ecdsa(&message, &recoverable_sig.to_standard(), &recovered_pubkey)
+                    .verify_ecdsa(
+                        &message,
+                        &recoverable_sig.to_standard(),
+                        &recovered_pubkey.unwrap(),
+                    )
                     .is_ok();
                 if verified {
-                    return;
+                    println!("{}", verified);
+                    // get taproot address
+                    let xonly_pubkey = &recovered_pubkey.unwrap().x_only_public_key().0;
+                    let secp = secp256k1::Secp256k1::verification_only();
+                    let taproot_address = bitcoin::Address::p2tr(
+                        &secp,
+                        xonly_pubkey.clone(),
+                        None,
+                        bitcoin::Network::Bitcoin,
+                    )
+                    .to_string();
+                    println!("{}", taproot_address);
                 }
             }
         }
+        Err(Error::InvalidSignature)
     }
 
     fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, Error> {
@@ -118,8 +137,19 @@ mod tests {
     #[test]
     fn test_bip322_signed_message() {
         let verifier = super::ECDSAVerifier::new();
-        let message = "hello";
-        let signature = "AUDKZpBI+I93qGPv9qmtr1h8W0FGnv1SFdWNBskAVHlPnI0jzCl7AaCnlDgqS6cCiRqCRr6eolK2iGl0iiw3Pe01";
-        verifier.verify_bip322_only_message(message, signature)
+        let message = "hello world~";
+        let signature = "AUCeEKDgQ6gaMHjAWsO5NLd/eo3aNJuyIz8sQS1G7L8jmhEcKYnn7/e4W9l1KDpbe7+d7CRNhhZVVADUM5x4Ykut";
+        let pubk_key = verifier
+            .verify_bip322_only_message(message, signature)
+            .unwrap();
+        let xonly_pubkey = &pubk_key.x_only_public_key().0;
+        let secp = secp256k1::Secp256k1::verification_only();
+        let taproot_address =
+            bitcoin::Address::p2tr(&secp, xonly_pubkey.clone(), None, bitcoin::Network::Bitcoin)
+                .to_string();
+        assert_eq!(
+            taproot_address,
+            "bc1p7dpnhaywwpk35qac2re3q3wfps8hmwcuffxjqemdqzq4r9ls23ss9asvzd"
+        );
     }
 }
