@@ -1,12 +1,13 @@
 use base64::engine::GeneralPurpose;
 use base64::{engine::general_purpose, Engine as _};
 use bitcoin::sign_message::signed_msg_hash;
-use secp256k1::ecdsa::RecoveryId;
+use secp256k1::ecdsa::{RecoveryId, Signature};
 use secp256k1::{Error, Message, PublicKey, Secp256k1, VerifyOnly};
 use std::str::FromStr;
 
 pub trait Verifier {
     fn verify(&self, message: &str, signature: &str, public_key: &str) -> bool;
+    fn verify_bip322_only_message(&self, message: &str, signature: &str);
     fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, Error>;
 }
 
@@ -31,6 +32,42 @@ impl Verifier for ECDSAVerifier {
         self.verify_only_message(message, signature)
             .and_then(|recovered_pubkey| Ok(recovered_pubkey == provided_pubkey))
             .unwrap_or(false)
+    }
+
+    fn verify_bip322_only_message(&self, message: &str, signature: &str) {
+        let base_64_encoded = self
+            .base_64_decoder
+            .decode(signature.as_bytes())
+            .map_err(|_| Error::InvalidSignature)
+            .unwrap();
+        let signature = Signature::from_der(&signature.as_bytes());
+        if signature.is_err() {
+            let err = signature.unwrap_err();
+            println!("Error: {:?}", err);
+            return;
+        }
+        let signature = signature.unwrap();
+        // this is the signature in DER format with 66 bytes, get recoverable signature from it
+        for recovery_id in 0..4 {
+            let rec_id = RecoveryId::from_i32(recovery_id).expect("Invalid recovery ID");
+            let recoverable_sig = secp256k1::ecdsa::RecoverableSignature::from_compact(
+                &base_64_encoded.clone()[1..],
+                rec_id,
+            );
+            if recoverable_sig.is_err() {
+                let recoverable_sig = recoverable_sig.unwrap();
+                let magic_hash = signed_msg_hash(message);
+                let message = Message::from_digest_slice((&magic_hash).as_ref()).unwrap();
+                let recovered_pubkey = self.secp.recover_ecdsa(&message, &recoverable_sig).unwrap();
+                let verified = self
+                    .secp
+                    .verify_ecdsa(&message, &recoverable_sig.to_standard(), &recovered_pubkey)
+                    .is_ok();
+                if verified {
+                    return;
+                }
+            }
+        }
     }
 
     fn verify_only_message(&self, message: &str, signature: &str) -> Result<PublicKey, Error> {
@@ -76,5 +113,13 @@ mod tests {
             taproot_address,
             "bc1py467s8cw4252m63pn9efr4fupe4rfwmv9atv5mzagmjw3kt4teaqlx3wnq"
         );
+    }
+
+    #[test]
+    fn test_bip322_signed_message() {
+        let verifier = super::ECDSAVerifier::new();
+        let message = "hello";
+        let signature = "AUDKZpBI+I93qGPv9qmtr1h8W0FGnv1SFdWNBskAVHlPnI0jzCl7AaCnlDgqS6cCiRqCRr6eolK2iGl0iiw3Pe01";
+        verifier.verify_bip322_only_message(message, signature)
     }
 }
