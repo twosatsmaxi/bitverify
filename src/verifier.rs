@@ -2,8 +2,6 @@ use base64::engine::GeneralPurpose;
 use base64::{engine::general_purpose, Engine as _};
 use bip322::verify_simple_encoded;
 use bitcoin::sign_message::signed_msg_hash;
-use bitcoin::taproot::Signature;
-use bitcoin::Address;
 use secp256k1::ecdsa::RecoveryId;
 use secp256k1::{Error, Message, PublicKey, Secp256k1, VerifyOnly};
 use std::str::FromStr;
@@ -17,7 +15,7 @@ pub trait Verifier {
 
 pub struct BitcoinMessageVerifier {
     secp: Secp256k1<VerifyOnly>,
-    base_64_decoder: GeneralPurpose,
+    pub base_64_decoder: GeneralPurpose,
 }
 impl BitcoinMessageVerifier {
     pub fn new() -> Self {
